@@ -902,7 +902,7 @@ function renderClassificacao() {
 }
 
 function renderTodosPalpites() {
-  const finalizados = [...getJogosCompletos(),...getJogosMataCompletos()].filter(j=>j.placarReal1!==null);
+  const finalizados = [...getJogosCompletos(),...getJogosMataCompletos()].filter(j=>statusJogo(j)==="andamento"||statusJogo(j)==="encerrado"||j.placarReal1!==null);
   if(!finalizados.length) return `<div class="card empty-state"><div class="empty-icon">📋</div><div class="empty-title">Nenhum jogo finalizado ainda</div></div>`;
   const parts=Object.values(STATE.participantes);
   return finalizados.map(j=>{
