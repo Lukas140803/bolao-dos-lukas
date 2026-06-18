@@ -201,7 +201,8 @@ select.user-select{background:#1a1a1a;border:1px solid #444;color:#fff;border-ra
     <button class="aba-btn" onclick="mudarAba('grupos',this)">Fase de grupos</button>
     <button class="aba-btn" onclick="mudarAba('mata',this)">Mata-mata</button>
     <button class="aba-btn" onclick="mudarAba('bonus',this)">Bônus</button>
-    <button class="aba-btn" onclick="mudarAba('classificacao',this)">Classificação</button>
+    <button class="aba-btn" onclick="mudarAba('rankingrodada',this)">Ranking Rodada</button>
+    <button class="aba-btn" onclick="mudarAba('classificacao',this)">Classificação Geral</button>
     <button class="aba-btn" onclick="mudarAba('todos',this)">Todos os palpites</button>
   </div>
 </div>
@@ -311,6 +312,7 @@ select.user-select{background:#1a1a1a;border:1px solid #444;color:#fff;border-ra
         <button class="admin-tab ativo" onclick="mudarAbaAdmin('participantes',this)">Participantes</button>
         <button class="admin-tab" onclick="mudarAbaAdmin('placares',this)">Placares</button>
         <button class="admin-tab" onclick="mudarAbaAdmin('bonus_gab',this)">Gabarito Bônus</button>
+        <button class="admin-tab" onclick="mudarAbaAdmin('rodadas',this)">Rodadas</button>
         <button class="admin-tab" onclick="mudarAbaAdmin('ranking',this)">Ranking</button>
       </div>
       <div id="admin-conteudo"></div>
@@ -522,6 +524,7 @@ let STATE = {
   gabaritoBonus: {},
   jogos: {},     // placares fase de grupos (id -> {p1,p2})
   jogosMata: {}, // times + placares mata (id -> {pais1,code1,pais2,code2,p1,p2})
+  checkpoint: {}, // ranking salvo no início da rodada atual (id -> {pontos,exatos,venc,ptsBon})
   usuarioAtual: localStorage.getItem("migos_usuario") ? JSON.parse(localStorage.getItem("migos_usuario")) : null,
   abaAtual: "proximos",
   abaAdminAtual: "participantes",
@@ -609,6 +612,22 @@ function calcRanking() {
   }).sort((a,b)=>b.pontos-a.pontos||b.exatos-a.exatos);
 }
 
+function calcRankingRodada() {
+  // Ranking da rodada atual = ranking geral MENOS o que já estava salvo no checkpoint
+  const geral = calcRanking();
+  const checkpoint = STATE.checkpoint || {};
+  return geral.map(p => {
+    const base = checkpoint[p.id] || { pontos: 0, exatos: 0, venc: 0, ptsBon: 0 };
+    return {
+      ...p,
+      pontos: p.pontos - base.pontos,
+      exatos: p.exatos - base.exatos,
+      venc: p.venc - base.venc,
+      ptsBon: p.ptsBon - base.ptsBon,
+    };
+  }).sort((a,b)=>b.pontos-a.pontos||b.exatos-a.exatos);
+}
+
 function formatData(ds) {
   const [y,m,d]=ds.split("-");
   const date=new Date(y,m-1,d);
@@ -647,6 +666,7 @@ function iniciarListeners() {
   onValue(ref(db,"migos/palpites"),      snap => { STATE.palpites      = snap.val() || {}; renderTudo(); }, onErr);
   onValue(ref(db,"migos/bonus"),         snap => { STATE.bonus         = snap.val() || {}; renderTudo(); }, onErr);
   onValue(ref(db,"migos/gabaritoBonus"), snap => { STATE.gabaritoBonus = snap.val() || {}; renderTudo(); }, onErr);
+  onValue(ref(db,"migos/checkpoint"),    snap => { STATE.checkpoint    = snap.val() || {}; renderTudo(); }, onErr);
   onValue(ref(db,"migos/jogos"),         snap => { STATE.jogos         = snap.val() || {}; renderTudo(); }, onErr);
   onValue(ref(db,"migos/jogosMata"),     snap => {
     STATE.jogosMata = snap.val() || {};
@@ -717,6 +737,7 @@ function renderConteudo() {
     return;
   }
   if(aba==="bonus") { el.innerHTML = alertEntrar + (STATE.usuarioAtual ? renderBonus() : ""); return; }
+  if(aba==="rankingrodada") { el.innerHTML = renderRankingRodada(); return; }
   if(aba==="classificacao") { el.innerHTML = renderClassificacao(); return; }
   if(aba==="todos") { el.innerHTML = renderTodosPalpites(); return; }
 }
@@ -885,6 +906,26 @@ function renderBonus() {
   }).join("");
 }
 
+function renderRankingRodada() {
+  const ranking=calcRankingRodada();
+  const dataInicio = STATE.checkpoint?._dataInicio
+    ? `desde ${formatData(STATE.checkpoint._dataInicio.split("T")[0])}`
+    : "desde o início da Copa";
+  const infoTopo = `<div style="font-size:12px;color:#888;margin-bottom:14px">Pontuação acumulada ${dataInicio}. Zera só quando o admin iniciar uma nova rodada.</div>`;
+  if(!ranking.length) return `<div class="card"><div class="card-titulo">🔄 Ranking da Rodada</div>${infoTopo}<div style="color:#555;font-size:13px">Nenhum participante.</div></div>`;
+  return `<div class="card"><div class="card-titulo">🔄 Ranking da Rodada</div>${infoTopo}`+
+    ranking.map((p,i)=>`
+      <div style="display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid #1f1f1f">
+        <div class="rank-pos" style="${rankPosCor(i)}">${i+1}</div>
+        <div style="flex:1"><div style="font-weight:700;font-size:15px">${p.nome}</div>${p.apelido?`<div style="font-size:12px;color:#666">"${p.apelido}"</div>`:""}</div>
+        <div style="display:flex;gap:14px;text-align:center">
+          <div><div style="font-family:'Bebas Neue',cursive;font-size:22px;color:#f5c400">${p.pontos}</div><div style="font-size:10px;color:#666">pts</div></div>
+          <div><div style="font-family:'Bebas Neue',cursive;font-size:22px;color:#f5c400">${p.exatos}</div><div style="font-size:10px;color:#666">exatos</div></div>
+          <div><div style="font-family:'Bebas Neue',cursive;font-size:22px;color:#4caf50">${p.ptsBon}</div><div style="font-size:10px;color:#666">bônus</div></div>
+        </div>
+      </div>`).join("")+"</div>";
+}
+
 function renderClassificacao() {
   const ranking=calcRanking();
   if(!ranking.length) return `<div class="card"><div class="card-titulo">🏆 Classificação Geral</div><div style="color:#555;font-size:13px">Nenhum participante.</div></div>`;
@@ -937,7 +978,42 @@ function renderAdminConteudo() {
   if(aba==="participantes") el.innerHTML=renderAdminParticipantes();
   else if(aba==="placares") el.innerHTML=renderAdminPlacares();
   else if(aba==="bonus_gab") el.innerHTML=renderAdminBonusGab();
+  else if(aba==="rodadas") el.innerHTML=renderAdminRodadas();
   else if(aba==="ranking") el.innerHTML=renderAdminRanking();
+}
+
+function renderAdminRodadas() {
+  const ranking = calcRanking();
+  const temCheckpoint = STATE.checkpoint && Object.keys(STATE.checkpoint).filter(k=>k!=="_dataInicio").length > 0;
+  const dataInicio = STATE.checkpoint?._dataInicio
+    ? new Date(STATE.checkpoint._dataInicio).toLocaleString("pt-BR")
+    : null;
+
+  return `<div>
+    <div style="background:#111;border:1px solid #222;border-radius:8px;padding:16px;margin-bottom:14px">
+      <div style="font-weight:700;font-size:14px;margin-bottom:8px">📊 Status atual</div>
+      ${temCheckpoint
+        ? `<div style="font-size:12px;color:#888">Rodada atual iniciada em: <span style="color:#f5c400">${dataInicio}</span></div>
+           <div style="font-size:12px;color:#888;margin-top:4px">A "Classificação Geral" sempre soma tudo desde o início da Copa. O "Ranking da Rodada" mostra só os pontos ganhos a partir da data acima.</div>`
+        : `<div style="font-size:12px;color:#888">Nenhuma rodada iniciada ainda — Ranking da Rodada e Classificação Geral são iguais.</div>`
+      }
+    </div>
+
+    <div style="background:#191600;border:1px solid #4a3d00;border-radius:8px;padding:16px;margin-bottom:14px">
+      <div style="font-weight:700;font-size:14px;margin-bottom:6px;color:#f5c400">🔄 Iniciar Nova Rodada</div>
+      <div style="font-size:12px;color:#aaa;margin-bottom:14px">
+        Isso salva a pontuação atual de cada participante como ponto de partida. A partir de agora, o "Ranking da Rodada" volta a contar do zero — mas a "Classificação Geral" continua somando tudo normalmente até o fim da Copa. Os palpites e jogos antigos continuam visíveis, nada é apagado.
+      </div>
+      <button class="btn" style="width:100%;padding:12px" onclick="adminIniciarRodada()">Iniciar Nova Rodada agora</button>
+    </div>
+
+    <div style="font-size:12px;color:#a78000;font-weight:700;letter-spacing:1px;margin-bottom:10px">PONTUAÇÃO ATUAL (que será usada como base)</div>
+    ${ranking.map(p=>`
+      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #1f1f1f;font-size:13px">
+        <span>${p.nome}</span>
+        <span style="color:#f5c400;font-weight:700">${p.pontos} pts</span>
+      </div>`).join("") || '<div style="color:#555;font-size:13px">Nenhum participante.</div>'}
+  </div>`;
 }
 
 function renderAdminParticipantes() {
@@ -1042,14 +1118,23 @@ function renderAdminBonusGab() {
 
 function renderAdminRanking() {
   const ranking=calcRanking();
+  const rankingRodada=calcRankingRodada();
   if(!ranking.length) return `<div style="color:#555;text-align:center;padding:20px;font-size:13px">Nenhum participante.</div>`;
-  return `<div style="font-size:12px;color:#777;margin-bottom:12px">Pontuação em tempo real (jogos + bônus)</div>`+
-  ranking.map((p,i)=>`
+  return `
+  <div style="font-size:12px;color:#a78000;font-weight:700;letter-spacing:1px;margin-bottom:10px">CLASSIFICAÇÃO GERAL</div>
+  ${ranking.map((p,i)=>`
     <div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid #1f1f1f">
       <div class="rank-pos" style="${rankPosCor(i)}">${i+1}</div>
       <div style="flex:1"><div style="font-weight:600">${p.nome}</div><div style="font-size:11px;color:#666">${p.exatos} exatos · +${p.ptsBon} bônus</div></div>
       <div style="font-family:'Bebas Neue',cursive;font-size:22px;color:#f5c400">${p.pontos} pts</div>
-    </div>`).join("");
+    </div>`).join("")}
+  <div style="font-size:12px;color:#a78000;font-weight:700;letter-spacing:1px;margin:20px 0 10px">RANKING DA RODADA ATUAL</div>
+  ${rankingRodada.map((p,i)=>`
+    <div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid #1f1f1f">
+      <div class="rank-pos" style="${rankPosCor(i)}">${i+1}</div>
+      <div style="flex:1"><div style="font-weight:600">${p.nome}</div><div style="font-size:11px;color:#666">${p.exatos} exatos · +${p.ptsBon} bônus</div></div>
+      <div style="font-family:'Bebas Neue',cursive;font-size:22px;color:#4caf50">${p.pontos} pts</div>
+    </div>`).join("")}`;
 }
 
 // ─── AÇÕES ────────────────────────────────────────────────
@@ -1373,6 +1458,23 @@ window.adminSalvarGabarito = async function() {
   await set(ref(db,"migos/gabaritoBonus"),gab);
   alert("Gabarito salvo! Pontuação atualizada.");
   renderAdminConteudo();
+};
+
+window.adminIniciarRodada = async function() {
+  if(!confirm("Iniciar uma nova rodada agora?\n\nO Ranking da Rodada vai voltar a contar do zero a partir deste momento. A Classificação Geral continua somando tudo normalmente. Nenhum palpite ou placar é apagado.")) return;
+  try {
+    const ranking = calcRanking();
+    const novoCheckpoint = { _dataInicio: new Date().toISOString() };
+    ranking.forEach(p => {
+      novoCheckpoint[p.id] = { pontos: p.pontos, exatos: p.exatos, venc: p.venc, ptsBon: p.ptsBon };
+    });
+    await set(ref(db,"migos/checkpoint"), novoCheckpoint);
+    alert("✅ Nova rodada iniciada! O Ranking da Rodada começou a contar do zero.");
+    renderAdminConteudo();
+  } catch(e) {
+    alert("❌ Erro ao iniciar rodada: " + e.message);
+    console.error(e);
+  }
 };
 
 window.copiarLink = function() {
