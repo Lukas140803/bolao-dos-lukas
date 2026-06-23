@@ -943,7 +943,9 @@ function renderClassificacao() {
 }
 
 function renderTodosPalpites() {
-  const finalizados = [...getJogosCompletos(),...getJogosMataCompletos()].filter(j=>statusJogo(j)==="andamento"||statusJogo(j)==="encerrado"||j.placarReal1!==null);
+  const finalizados = [...getJogosCompletos(),...getJogosMataCompletos()]
+    .filter(j=>statusJogo(j)==="andamento"||statusJogo(j)==="encerrado"||j.placarReal1!==null)
+    .sort((a,b)=> new Date(`${b.data}T${b.hora}:00-03:00`) - new Date(`${a.data}T${a.hora}:00-03:00`));
   if(!finalizados.length) return `<div class="card empty-state"><div class="empty-icon">📋</div><div class="empty-title">Nenhum jogo finalizado ainda</div></div>`;
   const parts=Object.values(STATE.participantes);
   return finalizados.map(j=>{
@@ -961,7 +963,7 @@ function renderTodosPalpites() {
     return `<div class="card">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
         ${flagHTML(j.code1,j.pais1,22)}
-        <span style="font-weight:700;font-size:13px">${j.pais1} ${j.placarReal1} × ${j.placarReal2} ${j.pais2}</span>
+        <span style="font-weight:700;font-size:13px">${j.pais1} ${j.placarReal1!==null?j.placarReal1:"?"} × ${j.placarReal2!==null?j.placarReal2:"?"} ${j.pais2}</span>
         ${flagHTML(j.code2,j.pais2,22)}
         <span style="font-size:11px;color:#666;margin-left:auto">${formatData(j.data)}</span>
       </div>
