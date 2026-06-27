@@ -314,7 +314,8 @@ select.user-select{background:#1a1a1a;border:1px solid #444;color:#fff;border-ra
       </div>
       <div style="display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap">
         <button class="admin-tab ativo" onclick="mudarAbaAdmin('participantes',this)">Participantes</button>
-        <button class="admin-tab" onclick="mudarAbaAdmin('placares',this)">Placares</button>
+        <button class="admin-tab" onclick="mudarAbaAdmin('placares',this)">Placares Grupos</button>
+        <button class="admin-tab" onclick="mudarAbaAdmin('mata',this)">Mata-mata</button>
         <button class="admin-tab" onclick="mudarAbaAdmin('bonus_gab',this)">Gabarito Bônus</button>
         <button class="admin-tab" onclick="mudarAbaAdmin('rodadas',this)">Rodadas</button>
         <button class="admin-tab" onclick="mudarAbaAdmin('ranking',this)">Ranking</button>
@@ -1054,6 +1055,7 @@ function renderAdminConteudo() {
   const aba=STATE.abaAdminAtual;
   if(aba==="participantes") el.innerHTML=renderAdminParticipantes();
   else if(aba==="placares") el.innerHTML=renderAdminPlacares();
+  else if(aba==="mata") el.innerHTML=renderAdminMata();
   else if(aba==="bonus_gab") el.innerHTML=renderAdminBonusGab();
   else if(aba==="rodadas") el.innerHTML=renderAdminRodadas();
   else if(aba==="ranking") el.innerHTML=renderAdminRanking();
@@ -1123,46 +1125,50 @@ function renderAdminPlacares() {
       ${j.placarReal1!==null?`<div style="margin-top:6px;font-size:11px;color:#4caf50;text-align:center">✓ Placar salvo: ${j.placarReal1} × ${j.placarReal2}</div>`:""}
     </div>`).join("");
 
+  return `<div>
+    <div style="font-size:12px;color:#a78000;font-weight:700;letter-spacing:1px;margin-bottom:10px">FASE DE GRUPOS</div>
+    ${gruposHTML}
+  </div>`;
+}
+
+function renderAdminMata() {
   const mataHTML = getJogosMataCompletos().map(j=>`
     <div style="background:#111;border:1px solid ${j.code1==='xx'?'#2a2000':'#222'};border-radius:8px;padding:12px 14px;margin-bottom:8px">
       <div style="font-size:11px;color:#a78000;font-weight:700;margin-bottom:8px">${j.grupo} · ${formatData(j.data)} ${j.hora}</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
         <div>
           <div style="font-size:10px;color:#666;margin-bottom:4px">Time 1</div>
-          <input class="input-field" style="margin-bottom:4px" placeholder="Nome (ex: Brasil)" value="${j.pais1}" id="mt-n1-${j.id}" oninput="adminAtualizarMata(${j.id})"/>
-          <input class="input-field" style="font-size:12px" placeholder="Código (ex: br)" value="${j.code1==='xx'?'':j.code1}" id="mt-c1-${j.id}" oninput="adminAtualizarMata(${j.id})"/>
+          <input class="input-field" style="margin-bottom:4px" placeholder="Nome (ex: Brasil)" value="${j.pais1==='A definir'||j.pais1.includes('Grupo')||j.pais1.includes('Melhor')?'':j.pais1}" id="mt-n1-${j.id}"/>
+          <input class="input-field" style="font-size:12px" placeholder="Código (ex: br)" value="${j.code1==='xx'?'':j.code1}" id="mt-c1-${j.id}"/>
         </div>
         <div>
           <div style="font-size:10px;color:#666;margin-bottom:4px">Time 2</div>
-          <input class="input-field" style="margin-bottom:4px" placeholder="Nome (ex: Argentina)" value="${j.pais2}" id="mt-n2-${j.id}" oninput="adminAtualizarMata(${j.id})"/>
-          <input class="input-field" style="font-size:12px" placeholder="Código (ex: ar)" value="${j.code2==='xx'?'':j.code2}" id="mt-c2-${j.id}" oninput="adminAtualizarMata(${j.id})"/>
+          <input class="input-field" style="margin-bottom:4px" placeholder="Nome (ex: Argentina)" value="${j.pais2==='A definir'||j.pais2.includes('Grupo')||j.pais2.includes('Melhor')?'':j.pais2}" id="mt-n2-${j.id}"/>
+          <input class="input-field" style="font-size:12px" placeholder="Código (ex: ar)" value="${j.code2==='xx'?'':j.code2}" id="mt-c2-${j.id}"/>
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        ${j.code1!=="xx"?flagHTML(j.code1,j.pais1,20):""}<span style="font-size:13px">${j.pais1}</span>
-        <input class="placar-input" type="number" min="0" max="20" id="adm-p1-${j.id}" value="${j.placarReal1!==null?j.placarReal1:""}" placeholder="—" style="width:46px;height:40px"/>
+        <span style="font-size:13px;flex:1">Placar (tempo normal)</span>
+        <input class="placar-input" type="number" min="0" max="20" inputmode="numeric" id="adm-p1-${j.id}" value="${j.placarReal1!==null?j.placarReal1:""}" placeholder="—" style="width:46px;height:40px"/>
         <span style="color:#444">×</span>
-        <input class="placar-input" type="number" min="0" max="20" id="adm-p2-${j.id}" value="${j.placarReal2!==null?j.placarReal2:""}" placeholder="—" style="width:46px;height:40px"/>
-        ${j.code2!=="xx"?flagHTML(j.code2,j.pais2,20):""}<span style="font-size:13px">${j.pais2}</span>
+        <input class="placar-input" type="number" min="0" max="20" inputmode="numeric" id="adm-p2-${j.id}" value="${j.placarReal2!==null?j.placarReal2:""}" placeholder="—" style="width:46px;height:40px"/>
       </div>
       <div style="margin-top:10px">
-        <div style="font-size:11px;color:#888;margin-bottom:6px">🏆 Quem classificou?</div>
+        <div style="font-size:11px;color:#888;margin-bottom:6px">🏆 Quem classificou? (preencha o nome dos times acima primeiro)</div>
         <div style="display:flex;gap:8px">
           <button onclick="adminSetClassif(${j.id},'1')" id="adm-classif1-${j.id}"
-            style="flex:1;padding:8px;border-radius:8px;border:2px solid ${j.classificadoReal==='1'?'#f5c400':'#333'};background:${j.classificadoReal==='1'?'#2a2200':'#222'};color:${j.classificadoReal==='1'?'#f5c400':'#888'};font-weight:600;font-size:12px;cursor:pointer;font-family:'Inter',sans-serif">${j.pais1}</button>
+            style="flex:1;padding:8px;border-radius:8px;border:2px solid ${j.classificadoReal==='1'?'#f5c400':'#333'};background:${j.classificadoReal==='1'?'#2a2200':'#222'};color:${j.classificadoReal==='1'?'#f5c400':'#888'};font-weight:600;font-size:12px;cursor:pointer;font-family:'Inter',sans-serif">Time 1</button>
           <button onclick="adminSetClassif(${j.id},'2')" id="adm-classif2-${j.id}"
-            style="flex:1;padding:8px;border-radius:8px;border:2px solid ${j.classificadoReal==='2'?'#f5c400':'#333'};background:${j.classificadoReal==='2'?'#2a2200':'#222'};color:${j.classificadoReal==='2'?'#f5c400':'#888'};font-weight:600;font-size:12px;cursor:pointer;font-family:'Inter',sans-serif">${j.pais2}</button>
+            style="flex:1;padding:8px;border-radius:8px;border:2px solid ${j.classificadoReal==='2'?'#f5c400':'#333'};background:${j.classificadoReal==='2'?'#2a2200':'#222'};color:${j.classificadoReal==='2'?'#f5c400':'#888'};font-weight:600;font-size:12px;cursor:pointer;font-family:'Inter',sans-serif">Time 2</button>
         </div>
       </div>
-      <button class="btn" style="width:100%;margin-top:10px;padding:10px" onclick="adminSalvarPlacar(${j.id},'mata')">${j.placarReal1!==null?"✏️ Atualizar":"💾 Salvar placar + classificação"}</button>
-      ${j.placarReal1!==null?`<div style="margin-top:6px;font-size:11px;color:#4caf50">✓ Salvo${j.classificadoReal?` · Classificou: ${j.classificadoReal==='1'?j.pais1:j.pais2}`:""}</div>`:""}
+      <button class="btn" style="width:100%;margin-top:10px;padding:10px" onclick="adminSalvarPlacar(${j.id},'mata')">💾 Salvar tudo deste jogo</button>
+      ${j.placarReal1!==null?`<div style="margin-top:6px;font-size:11px;color:#4caf50">✓ Placar ${j.placarReal1} × ${j.placarReal2}${j.classificadoReal?` · Classificou: ${j.classificadoReal==='1'?j.pais1:j.pais2}`:""}</div>`:""}
     </div>`).join("");
 
   return `<div>
-    <div style="font-size:12px;color:#a78000;font-weight:700;letter-spacing:1px;margin-bottom:10px">FASE DE GRUPOS</div>
-    ${gruposHTML}
-    <div style="font-size:12px;color:#a78000;font-weight:700;letter-spacing:1px;margin:18px 0 6px">MATA-MATA</div>
-    <div style="font-size:11px;color:#666;margin-bottom:12px">Preencha os nomes e códigos dos times conforme avançam.</div>
+    <div style="font-size:12px;color:#a78000;font-weight:700;letter-spacing:1px;margin-bottom:6px">MATA-MATA</div>
+    <div style="font-size:11px;color:#666;margin-bottom:12px">Preencha o nome e código (bandeira) dos times, o placar do tempo normal e quem classificou. Clique em "Salvar tudo deste jogo" ao terminar cada um — os campos não recarregam enquanto você digita.</div>
     ${mataHTML}
   </div>`;
 }
@@ -1536,36 +1542,39 @@ window.adminSalvarPlacar = async function(jogoId, tipo) {
   if(!el1 || !el2) return alert("Erro: campos não encontrados!");
   const p1 = el1.value;
   const p2 = el2.value;
-  if(p1===""||p2===""||p1===undefined||p2===undefined) return alert("Preencha os dois placares!");
-  if(isNaN(parseInt(p1))||isNaN(parseInt(p2))) return alert("Digite apenas números!");
   try {
     if(tipo==="grupos"){
+      if(p1===""||p2===""||p1===undefined||p2===undefined) return alert("Preencha os dois placares!");
+      if(isNaN(parseInt(p1))||isNaN(parseInt(p2))) return alert("Digite apenas números!");
       await update(ref(db,`migos/jogos/${jogoId}`),{p1:parseInt(p1),p2:parseInt(p2)});
+      alert(`✅ Placar ${p1} × ${p2} salvo com sucesso!`);
     } else {
+      // Mata-mata: salva os times sempre. Placar e classificação são opcionais.
       const n1=document.getElementById(`mt-n1-${jogoId}`)?.value||"";
       const c1=document.getElementById(`mt-c1-${jogoId}`)?.value||"xx";
       const n2=document.getElementById(`mt-n2-${jogoId}`)?.value||"";
       const c2=document.getElementById(`mt-c2-${jogoId}`)?.value||"xx";
-      // classificação: usa a escolhida agora ou a que já estava salva
+      if(!n1 || !n2) return alert("Preencha o nome dos dois times!");
+      const dados = { pais1:n1, code1:c1||"xx", pais2:n2, code2:c2||"xx" };
+      // Placar (só se preenchido)
+      const temPlacar = p1!=="" && p2!=="" && p1!==undefined && p2!==undefined;
+      if(temPlacar){
+        if(isNaN(parseInt(p1))||isNaN(parseInt(p2))) return alert("Placar deve ser número!");
+        dados.p1 = parseInt(p1);
+        dados.p2 = parseInt(p2);
+      }
+      // Classificação (só se escolhida)
       const jogoAtual = getJogosMataCompletos().find(j=>j.id===jogoId);
       const classif = _admClassif[jogoId] || jogoAtual?.classificadoReal || null;
-      if(!classif) return alert("Selecione quem classificou!");
-      await update(ref(db,`migos/jogosMata/${jogoId}`),{pais1:n1,code1:c1||"xx",pais2:n2,code2:c2||"xx",p1:parseInt(p1),p2:parseInt(p2),classif});
+      if(classif) dados.classif = classif;
+      await update(ref(db,`migos/jogosMata/${jogoId}`), dados);
+      alert(temPlacar ? `✅ Jogo salvo! ${n1} ${p1} × ${p2} ${n2}` : `✅ Times salvos: ${n1} × ${n2}`);
     }
-    alert(`✅ Placar ${p1} × ${p2} salvo com sucesso!`);
     renderAdminConteudo();
   } catch(e) {
     alert("❌ Erro ao salvar: " + e.message);
     console.error(e);
   }
-};
-
-window.adminAtualizarMata = async function(jogoId) {
-  const n1=document.getElementById(`mt-n1-${jogoId}`)?.value||"";
-  const c1=document.getElementById(`mt-c1-${jogoId}`)?.value||"xx";
-  const n2=document.getElementById(`mt-n2-${jogoId}`)?.value||"";
-  const c2=document.getElementById(`mt-c2-${jogoId}`)?.value||"xx";
-  await update(ref(db,`migos/jogosMata/${jogoId}`),{pais1:n1,code1:c1||"xx",pais2:n2,code2:c2||"xx"});
 };
 
 window.adminSalvarGabarito = async function() {
