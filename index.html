@@ -215,10 +215,14 @@ select.user-select{background:#1a1a1a;border:1px solid #444;color:#fff;border-ra
       <div id="ranking-list"><div style="color:#555;font-size:13px">Nenhum participante ainda.</div></div>
     </div>
     <div class="card" style="background:#111">
-      <div style="font-size:11px;color:#555;margin-bottom:8px;font-weight:600;letter-spacing:1px">PONTUAÇÃO</div>
+      <div style="font-size:11px;color:#555;margin-bottom:8px;font-weight:600;letter-spacing:1px">PONTUAÇÃO — FASE DE GRUPOS</div>
       <div class="pts-row"><span style="color:#999">🎯 Placar exato</span><span style="color:#f5c400;font-weight:700">3 pts</span></div>
       <div class="pts-row"><span style="color:#999">✅ Vencedor/empate</span><span style="color:#4caf50;font-weight:700">1 pt</span></div>
       <div class="pts-row"><span style="color:#999">❌ Erro total</span><span style="color:#f55;font-weight:700">0 pts</span></div>
+      <div style="font-size:11px;color:#555;margin:12px 0 8px;font-weight:600;letter-spacing:1px">MATA-MATA (soma classificação)</div>
+      <div class="pts-row"><span style="color:#999">🎯 Placar exato</span><span style="color:#f5c400;font-weight:700">3 pts</span></div>
+      <div class="pts-row"><span style="color:#999">✅ Vencedor/empate normal</span><span style="color:#4caf50;font-weight:700">1 pt</span></div>
+      <div class="pts-row"><span style="color:#999">🏆 Quem classifica</span><span style="color:#f5c400;font-weight:700">+1 pt</span></div>
       <div style="margin-top:8px;font-size:11px;color:#555">+ pontos bônus</div>
     </div>
   </div>
@@ -554,6 +558,7 @@ function getJogosMataCompletos() {
       code2: s.code2 || j.code2,
       placarReal1: s.p1 ?? null,
       placarReal2: s.p2 ?? null,
+      classificadoReal: s.classif || null, // "1" = time1 classificou, "2" = time2
     };
   });
 }
@@ -583,6 +588,31 @@ function calcPontos(pal, p1real, p2real) {
   return vR===vP?1:0;
 }
 
+// Pontuação do mata-mata: (placar exato=3 OU vencedor/empate=1) + (acertou quem classifica=+1)
+function calcPontosMata(pal, jogo) {
+  const p1real = jogo.placarReal1, p2real = jogo.placarReal2;
+  if (p1real === null || p2real === null) return 0;
+  let pts = 0;
+  // Parte 1: resultado do jogo (pega só o maior)
+  if (pal && pal.g1 !== undefined && pal.g2 !== undefined) {
+    const g1 = parseInt(pal.g1), g2 = parseInt(pal.g2);
+    if (!isNaN(g1) && !isNaN(g2)) {
+      if (g1===p1real && g2===p2real) {
+        pts += 3; // placar exato
+      } else {
+        const vR = p1real>p2real?1:p1real<p2real?2:0;
+        const vP = g1>g2?1:g1<g2?2:0;
+        if (vR===vP) pts += 1; // acertou vencedor ou que ia empatar
+      }
+    }
+  }
+  // Parte 2: classificação (soma sempre)
+  if (jogo.classificadoReal && pal && pal.classif && pal.classif === jogo.classificadoReal) {
+    pts += 1;
+  }
+  return pts;
+}
+
 function calcPontosBonus(bonusPart, gabarito) {
   if (!bonusPart||!gabarito) return 0;
   let pts=0;
@@ -596,15 +626,24 @@ function calcPontosBonus(bonusPart, gabarito) {
 }
 
 function calcRanking() {
-  const todosJogos = [...getJogosCompletos(), ...getJogosMataCompletos()];
+  const jogosGrupos = getJogosCompletos();
+  const jogosMata = getJogosMataCompletos();
   return Object.values(STATE.participantes).map(p => {
     let pts=0,exatos=0,venc=0;
-    todosJogos.forEach(j=>{
+    // Fase de grupos
+    jogosGrupos.forEach(j=>{
       const pal=STATE.palpites[p.id]?.[j.id];
       const pontos=calcPontos(pal,j.placarReal1,j.placarReal2);
       pts+=pontos;
       if(pontos===3)exatos++;
       if(pontos===1)venc++;
+    });
+    // Mata-mata (pontuação especial com classificação)
+    jogosMata.forEach(j=>{
+      const pal=STATE.palpites[p.id]?.[j.id];
+      const pontos=calcPontosMata(pal,j);
+      pts+=pontos;
+      if(pontos>=3)exatos++;
     });
     const ptsBon=calcPontosBonus(STATE.bonus[p.id],STATE.gabaritoBonus);
     pts+=ptsBon;
@@ -774,7 +813,7 @@ function jogoCardHTML(jogo, aba) {
   const isMata = jogo.id>=100;
   const uid = STATE.usuarioAtual?.id;
   const pal = uid ? (STATE.palpites[uid]?.[jogo.id]||{}) : {};
-  const pts = calcPontos(pal, jogo.placarReal1, jogo.placarReal2);
+  const pts = isMata ? calcPontosMata(pal, jogo) : calcPontos(pal, jogo.placarReal1, jogo.placarReal2);
 
   const statusClass = st==="finalizado"?"status-finalizado":st==="andamento"?"status-andamento":st==="encerrado"?"status-finalizado":"status-pendente";
   const statusTxt = st==="finalizado"?"✓ Finalizado":st==="andamento"?"● Ao vivo":st==="encerrado"?"⏳ Aguardando placar":"Não iniciado";
@@ -782,9 +821,8 @@ function jogoCardHTML(jogo, aba) {
 
   let ptsBadge="";
   if(st==="finalizado"&&uid){
-    const c=pts===3?"#f5c400":pts===1?"#4caf50":"#f55";
-    const t=pts===3?"🎯 +3":pts===1?"✅ +1":"❌ 0";
-    ptsBadge=`<span class="pts-badge" style="color:${c}">${t}</span>`;
+    const c=pts>0?"#f5c400":"#f55";
+    ptsBadge=`<span class="pts-badge" style="color:${c}">${pts>0?`+${pts}`:"0"} pts</span>`;
   }
 
   let placarMeio="";
@@ -811,6 +849,40 @@ function jogoCardHTML(jogo, aba) {
       </div>
       ${motivo?`<div style="font-size:10px;color:#f55;font-weight:600">${motivo}</div>`:""}
     </div>`;
+  }
+
+  // Campo "Quem classifica?" — só em jogos de mata-mata com times definidos
+  let classifHTML = "";
+  if (isMata && jogo.code1 !== "xx" && jogo.code2 !== "xx") {
+    const bloqueado = !uid || st !== "pendente";
+    const escolhido = pal.classif || "";
+    const realC = jogo.classificadoReal;
+    if (st === "finalizado" && realC) {
+      // Mostra resultado
+      const acertou = escolhido && escolhido === realC;
+      const nomeClassReal = realC === "1" ? jogo.pais1 : jogo.pais2;
+      const nomeClassPal = escolhido ? (escolhido === "1" ? jogo.pais1 : jogo.pais2) : "—";
+      classifHTML = `<div style="margin-top:10px;padding-top:10px;border-top:1px solid #1f1f1f;font-size:12px;color:#888;display:flex;justify-content:space-between;align-items:center">
+        <span>Classificou: <span style="color:#fff;font-weight:600">${nomeClassReal}</span></span>
+        <span style="color:${acertou?"#4caf50":"#f55"}">Você: ${nomeClassPal} ${acertou?"✅ +1":"❌"}</span>
+      </div>`;
+    } else {
+      const op1Sel = escolhido === "1";
+      const op2Sel = escolhido === "2";
+      classifHTML = `<div style="margin-top:12px;padding-top:12px;border-top:1px solid #1f1f1f">
+        <div style="font-size:11px;color:#888;margin-bottom:8px;text-align:center">🏆 Quem classifica? (pênaltis/prorrogação contam)</div>
+        <div style="display:flex;gap:8px">
+          <button onclick="salvarClassif(${jogo.id},'1')" ${bloqueado?"disabled":""}
+            style="flex:1;padding:9px;border-radius:8px;border:2px solid ${op1Sel?"#f5c400":"#333"};background:${op1Sel?"#2a2200":"#222"};color:${op1Sel?"#f5c400":"#888"};font-weight:600;font-size:12px;cursor:${bloqueado?"not-allowed":"pointer"};opacity:${bloqueado?"0.4":"1"};display:flex;align-items:center;justify-content:center;gap:6px;font-family:'Inter',sans-serif">
+            ${flagHTML(jogo.code1,jogo.pais1,16)} ${jogo.pais1}
+          </button>
+          <button onclick="salvarClassif(${jogo.id},'2')" ${bloqueado?"disabled":""}
+            style="flex:1;padding:9px;border-radius:8px;border:2px solid ${op2Sel?"#f5c400":"#333"};background:${op2Sel?"#2a2200":"#222"};color:${op2Sel?"#f5c400":"#888"};font-weight:600;font-size:12px;cursor:${bloqueado?"not-allowed":"pointer"};opacity:${bloqueado?"0.4":"1"};display:flex;align-items:center;justify-content:center;gap:6px;font-family:'Inter',sans-serif">
+            ${flagHTML(jogo.code2,jogo.pais2,16)} ${jogo.pais2}
+          </button>
+        </div>
+      </div>`;
+    }
   }
 
   let footer="";
@@ -841,6 +913,7 @@ function jogoCardHTML(jogo, aba) {
         ${flagHTML(jogo.code2,jogo.pais2,28)}
       </div>
     </div>
+    ${classifHTML}
     ${footer}
   </div>`;
 }
@@ -949,15 +1022,17 @@ function renderTodosPalpites() {
   if(!finalizados.length) return `<div class="card empty-state"><div class="empty-icon">📋</div><div class="empty-title">Nenhum jogo finalizado ainda</div></div>`;
   const parts=Object.values(STATE.participantes);
   return finalizados.map(j=>{
+    const isMata = j.id>=100;
     const cards=parts.map(p=>{
       const pal=STATE.palpites[p.id]?.[j.id];
-      const pts=calcPontos(pal,j.placarReal1,j.placarReal2);
-      const c=pts===3?"#f5c400":pts===1?"#2a5e2a":"#2a2a2a";
-      const txt=pal&&pal.g1!==undefined?`${pal.g1} × ${pal.g2}`:"—";
-      const badge=pts===3?"🎯":pts===1?"✅":"";
+      const pts=isMata?calcPontosMata(pal,j):calcPontos(pal,j.placarReal1,j.placarReal2);
+      const c=pts>=3?"#f5c400":pts>=1?"#2a5e2a":"#2a2a2a";
+      let txt=pal&&pal.g1!==undefined?`${pal.g1} × ${pal.g2}`:"—";
+      if(isMata && pal && pal.classif){ txt += ` (${pal.classif==="1"?j.pais1:j.pais2})`; }
+      const badge=pts>0?`+${pts}`:"";
       return `<div style="background:#222;border-radius:8px;padding:8px 14px;font-size:13px;border:1px solid ${c}">
         <div style="font-weight:600;margin-bottom:2px">${p.apelido||p.nome.split(" ")[0]}</div>
-        <div style="color:${pts===3?"#f5c400":pts===1?"#4caf50":"#666"}">${txt} ${badge}</div>
+        <div style="color:${pts>=3?"#f5c400":pts>=1?"#4caf50":"#666"}">${txt} ${badge}</div>
       </div>`;
     }).join("");
     return `<div class="card">
@@ -1069,9 +1144,18 @@ function renderAdminPlacares() {
         <span style="color:#444">×</span>
         <input class="placar-input" type="number" min="0" max="20" id="adm-p2-${j.id}" value="${j.placarReal2!==null?j.placarReal2:""}" placeholder="—" style="width:46px;height:40px"/>
         ${j.code2!=="xx"?flagHTML(j.code2,j.pais2,20):""}<span style="font-size:13px">${j.pais2}</span>
-        <button class="btn btn-sm" style="margin-left:auto" onclick="adminSalvarPlacar(${j.id},'mata')">${j.placarReal1!==null?"Atualizar":"Salvar"}</button>
       </div>
-      ${j.placarReal1!==null?`<div style="margin-top:6px;font-size:11px;color:#4caf50">✓ Salvo</div>`:""}
+      <div style="margin-top:10px">
+        <div style="font-size:11px;color:#888;margin-bottom:6px">🏆 Quem classificou?</div>
+        <div style="display:flex;gap:8px">
+          <button onclick="adminSetClassif(${j.id},'1')" id="adm-classif1-${j.id}"
+            style="flex:1;padding:8px;border-radius:8px;border:2px solid ${j.classificadoReal==='1'?'#f5c400':'#333'};background:${j.classificadoReal==='1'?'#2a2200':'#222'};color:${j.classificadoReal==='1'?'#f5c400':'#888'};font-weight:600;font-size:12px;cursor:pointer;font-family:'Inter',sans-serif">${j.pais1}</button>
+          <button onclick="adminSetClassif(${j.id},'2')" id="adm-classif2-${j.id}"
+            style="flex:1;padding:8px;border-radius:8px;border:2px solid ${j.classificadoReal==='2'?'#f5c400':'#333'};background:${j.classificadoReal==='2'?'#2a2200':'#222'};color:${j.classificadoReal==='2'?'#f5c400':'#888'};font-weight:600;font-size:12px;cursor:pointer;font-family:'Inter',sans-serif">${j.pais2}</button>
+        </div>
+      </div>
+      <button class="btn" style="width:100%;margin-top:10px;padding:10px" onclick="adminSalvarPlacar(${j.id},'mata')">${j.placarReal1!==null?"✏️ Atualizar":"💾 Salvar placar + classificação"}</button>
+      ${j.placarReal1!==null?`<div style="margin-top:6px;font-size:11px;color:#4caf50">✓ Salvo${j.classificadoReal?` · Classificou: ${j.classificadoReal==='1'?j.pais1:j.pais2}`:""}</div>`:""}
     </div>`).join("");
 
   return `<div>
@@ -1328,6 +1412,16 @@ window.salvarPalpite = function(jogoId, campo, valor) {
   }, 800);
 };
 
+window.salvarClassif = async function(jogoId, valor) {
+  const uid = STATE.usuarioAtual?.id;
+  if(!uid) return;
+  try {
+    await set(ref(db,`migos/palpites/${uid}/${jogoId}/classif`), valor);
+  } catch(e) {
+    console.error("Erro ao salvar classificação:", e);
+  }
+};
+
 window.selecionarBonus = async function(pergId, valor, tipo) {
   const uid=STATE.usuarioAtual?.id;
   if(!uid) return;
@@ -1417,6 +1511,25 @@ window.adminRemoverParticipante = async function(id) {
   }
 };
 
+let _admClassif = {}; // guarda a classificação escolhida temporariamente por jogo
+
+window.adminSetClassif = function(jogoId, valor) {
+  _admClassif[jogoId] = valor;
+  // Atualiza visual dos botões
+  const b1 = document.getElementById(`adm-classif1-${jogoId}`);
+  const b2 = document.getElementById(`adm-classif2-${jogoId}`);
+  if(b1 && b2) {
+    const sel1 = valor==="1";
+    b1.style.borderColor = sel1?"#f5c400":"#333";
+    b1.style.background = sel1?"#2a2200":"#222";
+    b1.style.color = sel1?"#f5c400":"#888";
+    const sel2 = valor==="2";
+    b2.style.borderColor = sel2?"#f5c400":"#333";
+    b2.style.background = sel2?"#2a2200":"#222";
+    b2.style.color = sel2?"#f5c400":"#888";
+  }
+};
+
 window.adminSalvarPlacar = async function(jogoId, tipo) {
   const el1 = document.getElementById(`adm-p1-${jogoId}`);
   const el2 = document.getElementById(`adm-p2-${jogoId}`);
@@ -1433,7 +1546,11 @@ window.adminSalvarPlacar = async function(jogoId, tipo) {
       const c1=document.getElementById(`mt-c1-${jogoId}`)?.value||"xx";
       const n2=document.getElementById(`mt-n2-${jogoId}`)?.value||"";
       const c2=document.getElementById(`mt-c2-${jogoId}`)?.value||"xx";
-      await update(ref(db,`migos/jogosMata/${jogoId}`),{pais1:n1,code1:c1||"xx",pais2:n2,code2:c2||"xx",p1:parseInt(p1),p2:parseInt(p2)});
+      // classificação: usa a escolhida agora ou a que já estava salva
+      const jogoAtual = getJogosMataCompletos().find(j=>j.id===jogoId);
+      const classif = _admClassif[jogoId] || jogoAtual?.classificadoReal || null;
+      if(!classif) return alert("Selecione quem classificou!");
+      await update(ref(db,`migos/jogosMata/${jogoId}`),{pais1:n1,code1:c1||"xx",pais2:n2,code2:c2||"xx",p1:parseInt(p1),p2:parseInt(p2),classif});
     }
     alert(`✅ Placar ${p1} × ${p2} salvo com sucesso!`);
     renderAdminConteudo();
