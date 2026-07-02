@@ -562,6 +562,8 @@ function getJogosMataCompletos() {
       placarReal1: s.p1 ?? null,
       placarReal2: s.p2 ?? null,
       classificadoReal: s.classif || null, // "1" = time1 classificou, "2" = time2
+      placarFinal1: s.pf1 ?? null, // placar final com prorrogação/pênaltis (só exibição)
+      placarFinal2: s.pf2 ?? null,
     };
   });
 }
@@ -830,10 +832,14 @@ function jogoCardHTML(jogo, aba) {
 
   let placarMeio="";
   if(st==="finalizado"&&jogo.placarReal1!==null){
-    placarMeio=`<div style="display:flex;align-items:center;gap:4px;padding:0 8px">
-      <span class="placar-real">${jogo.placarReal1}</span>
-      <span class="placar-sep">×</span>
-      <span class="placar-real">${jogo.placarReal2}</span>
+    const temFinal = jogo.placarFinal1!==null && jogo.placarFinal1!==undefined;
+    placarMeio=`<div style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:0 8px">
+      <div style="display:flex;align-items:center;gap:4px">
+        <span class="placar-real">${jogo.placarReal1}</span>
+        <span class="placar-sep">×</span>
+        <span class="placar-real">${jogo.placarReal2}</span>
+      </div>
+      ${temFinal?`<div style="font-size:10px;color:#888;white-space:nowrap">final: ${jogo.placarFinal1} × ${jogo.placarFinal2}</div>`:""}
     </div>`;
   } else {
     const bloqueado = !uid || st !== "pendente";
@@ -1156,6 +1162,15 @@ function renderAdminMata() {
         <span style="color:#444">×</span>
         <input class="placar-input" type="number" min="0" max="20" inputmode="numeric" id="adm-p2-${j.id}" value="${j.placarReal2!==null?j.placarReal2:""}" placeholder="—" style="width:46px;height:40px"/>
       </div>
+      <div style="margin-top:10px;padding:8px 10px;background:#0d0d0d;border-radius:6px">
+        <div style="font-size:10px;color:#888;margin-bottom:6px">⏱️ Foi pra prorrogação/pênaltis? (opcional — só se o jogo empatou no tempo normal)</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="font-size:12px;flex:1;color:#999">Placar final</span>
+          <input class="placar-input" type="number" min="0" max="20" inputmode="numeric" id="adm-pf1-${j.id}" value="${j.placarFinal1!==null?j.placarFinal1:""}" placeholder="—" style="width:42px;height:36px;font-size:15px"/>
+          <span style="color:#444">×</span>
+          <input class="placar-input" type="number" min="0" max="20" inputmode="numeric" id="adm-pf2-${j.id}" value="${j.placarFinal2!==null?j.placarFinal2:""}" placeholder="—" style="width:42px;height:36px;font-size:15px"/>
+        </div>
+      </div>
       <div style="margin-top:10px">
         <div style="font-size:11px;color:#888;margin-bottom:6px">🏆 Quem classificou? (preencha o nome dos times acima primeiro)</div>
         <div style="display:flex;gap:8px">
@@ -1166,7 +1181,7 @@ function renderAdminMata() {
         </div>
       </div>
       <button class="btn" style="width:100%;margin-top:10px;padding:10px" onclick="adminSalvarPlacar(${j.id},'mata')">💾 Salvar tudo deste jogo</button>
-      ${j.placarReal1!==null?`<div style="margin-top:6px;font-size:11px;color:#4caf50">✓ Placar ${j.placarReal1} × ${j.placarReal2}${j.classificadoReal?` · Classificou: ${j.classificadoReal==='1'?j.pais1:j.pais2}`:""}</div>`:""}
+      ${j.placarReal1!==null?`<div style="margin-top:6px;font-size:11px;color:#4caf50">✓ Tempo normal: ${j.placarReal1} × ${j.placarReal2}${j.placarFinal1!==null?` · Final: ${j.placarFinal1} × ${j.placarFinal2}`:""}${j.classificadoReal?` · Classificou: ${j.classificadoReal==='1'?j.pais1:j.pais2}`:""}</div>`:""}
     </div>`).join("");
 
   return `<div>
@@ -1629,6 +1644,15 @@ window.adminSalvarPlacar = async function(jogoId, tipo) {
         if(isNaN(parseInt(p1))||isNaN(parseInt(p2))) return alert("Placar deve ser número!");
         dados.p1 = parseInt(p1);
         dados.p2 = parseInt(p2);
+      }
+      // Placar final (prorrogação/pênaltis) — só exibição, opcional
+      const pf1 = document.getElementById(`adm-pf1-${jogoId}`)?.value;
+      const pf2 = document.getElementById(`adm-pf2-${jogoId}`)?.value;
+      if(pf1!=="" && pf2!=="" && pf1!==undefined && pf2!==undefined){
+        if(!isNaN(parseInt(pf1)) && !isNaN(parseInt(pf2))){
+          dados.pf1 = parseInt(pf1);
+          dados.pf2 = parseInt(pf2);
+        }
       }
       // Classificação (só se escolhida)
       const jogoAtual = getJogosMataCompletos().find(j=>j.id===jogoId);
