@@ -316,6 +316,7 @@ select.user-select{background:#1a1a1a;border:1px solid #444;color:#fff;border-ra
         <button class="admin-tab ativo" onclick="mudarAbaAdmin('participantes',this)">Participantes</button>
         <button class="admin-tab" onclick="mudarAbaAdmin('placares',this)">Placares Grupos</button>
         <button class="admin-tab" onclick="mudarAbaAdmin('mata',this)">Mata-mata</button>
+        <button class="admin-tab" onclick="mudarAbaAdmin('palpites',this)">Editar Palpites</button>
         <button class="admin-tab" onclick="mudarAbaAdmin('bonus_gab',this)">Gabarito Bônus</button>
         <button class="admin-tab" onclick="mudarAbaAdmin('rodadas',this)">Rodadas</button>
         <button class="admin-tab" onclick="mudarAbaAdmin('ranking',this)">Ranking</button>
@@ -535,6 +536,7 @@ let STATE = {
   abaAdminAtual: "participantes",
   editandoId: null,
   adminLogado: false,
+  adminPalpiteParticipante: null, // participante selecionado na aba Editar Palpites
 };
 
 // ─── HELPERS ─────────────────────────────────────────────
@@ -1056,6 +1058,7 @@ function renderAdminConteudo() {
   if(aba==="participantes") el.innerHTML=renderAdminParticipantes();
   else if(aba==="placares") el.innerHTML=renderAdminPlacares();
   else if(aba==="mata") el.innerHTML=renderAdminMata();
+  else if(aba==="palpites") el.innerHTML=renderAdminPalpites();
   else if(aba==="bonus_gab") el.innerHTML=renderAdminBonusGab();
   else if(aba==="rodadas") el.innerHTML=renderAdminRodadas();
   else if(aba==="ranking") el.innerHTML=renderAdminRanking();
@@ -1170,6 +1173,49 @@ function renderAdminMata() {
     <div style="font-size:12px;color:#a78000;font-weight:700;letter-spacing:1px;margin-bottom:6px">MATA-MATA</div>
     <div style="font-size:11px;color:#666;margin-bottom:12px">Preencha o nome e código (bandeira) dos times, o placar do tempo normal e quem classificou. Clique em "Salvar tudo deste jogo" ao terminar cada um — os campos não recarregam enquanto você digita.</div>
     ${mataHTML}
+  </div>`;
+}
+
+function renderAdminPalpites() {
+  const parts = Object.values(STATE.participantes);
+  if(!parts.length) return `<div style="color:#555;text-align:center;padding:20px;font-size:13px">Nenhum participante cadastrado.</div>`;
+
+  // Seletor de participante
+  const seletor = `<div style="margin-bottom:16px">
+    <div style="font-size:11px;color:#777;margin-bottom:6px;letter-spacing:1px">ESCOLHA O PARTICIPANTE</div>
+    <select class="input-field" onchange="adminSelecionarParticipantePalpite(this.value)">
+      <option value="">— selecione —</option>
+      ${parts.map(p=>`<option value="${p.id}" ${STATE.adminPalpiteParticipante===p.id?"selected":""}>${p.nome}${p.apelido?` (${p.apelido})`:""}</option>`).join("")}
+    </select>
+  </div>`;
+
+  const pid = STATE.adminPalpiteParticipante;
+  if(!pid) return `<div>${seletor}<div style="color:#555;text-align:center;padding:20px;font-size:13px">Selecione um participante para editar os palpites.</div></div>`;
+
+  const todosJogos = [...getJogosCompletos(), ...getJogosMataCompletos()];
+  const jogosHTML = todosJogos.map(j=>{
+    const pal = STATE.palpites[pid]?.[j.id] || {};
+    const v1 = pal.g1!==undefined?pal.g1:"";
+    const v2 = pal.g2!==undefined?pal.g2:"";
+    const isMata = j.id>=100;
+    if(isMata && j.code1==="xx" && j.code2==="xx") return ""; // pula jogos mata sem times
+    return `<div style="background:#111;border:1px solid #222;border-radius:8px;padding:10px 12px;margin-bottom:8px">
+      <div style="font-size:11px;color:#666;margin-bottom:6px">${j.grupo} · ${formatData(j.data)} ${j.hora}</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        ${flagHTML(j.code1,j.pais1,18)}<span style="font-size:12px;flex:1">${j.pais1}</span>
+        <input class="placar-input" type="number" min="0" max="99" inputmode="numeric" id="admpal-p1-${j.id}" value="${v1}" placeholder="—" style="width:42px;height:38px;font-size:17px"/>
+        <span style="color:#444">×</span>
+        <input class="placar-input" type="number" min="0" max="99" inputmode="numeric" id="admpal-p2-${j.id}" value="${v2}" placeholder="—" style="width:42px;height:38px;font-size:17px"/>
+        <span style="font-size:12px;flex:1;text-align:right">${j.pais2}</span>${flagHTML(j.code2,j.pais2,18)}
+      </div>
+      <button class="btn btn-sm" style="width:100%;margin-top:8px" onclick="adminSalvarPalpite('${pid}',${j.id})">Salvar palpite deste jogo</button>
+    </div>`;
+  }).join("");
+
+  return `<div>
+    ${seletor}
+    <div style="font-size:11px;color:#666;margin-bottom:12px">⚠️ Você pode editar o palpite de qualquer jogo, mesmo com o jogo já começado ou encerrado.</div>
+    ${jogosHTML}
   </div>`;
 }
 
@@ -1518,6 +1564,27 @@ window.adminRemoverParticipante = async function(id) {
 };
 
 let _admClassif = {}; // guarda a classificação escolhida temporariamente por jogo
+
+window.adminSelecionarParticipantePalpite = function(pid) {
+  STATE.adminPalpiteParticipante = pid || null;
+  renderAdminConteudo();
+};
+
+window.adminSalvarPalpite = async function(pid, jogoId) {
+  const el1 = document.getElementById(`admpal-p1-${jogoId}`);
+  const el2 = document.getElementById(`admpal-p2-${jogoId}`);
+  if(!el1 || !el2) return alert("Erro: campos não encontrados!");
+  const p1 = el1.value, p2 = el2.value;
+  if(p1===""||p2===""||p1===undefined||p2===undefined) return alert("Preencha os dois placares!");
+  if(isNaN(parseInt(p1))||isNaN(parseInt(p2))) return alert("Digite apenas números!");
+  try {
+    await update(ref(db,`migos/palpites/${pid}/${jogoId}`),{g1:String(parseInt(p1)),g2:String(parseInt(p2))});
+    alert(`✅ Palpite salvo: ${p1} × ${p2}`);
+  } catch(e) {
+    alert("❌ Erro ao salvar: " + e.message);
+    console.error(e);
+  }
+};
 
 window.adminSetClassif = function(jogoId, valor) {
   _admClassif[jogoId] = valor;
